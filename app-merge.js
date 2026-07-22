@@ -164,9 +164,22 @@ $("mergeBtn").addEventListener("click",async()=>{
   }
 });
 
+function loadDecorationFeatures(){
+  if(document.querySelector('script[data-rabbit-decorations]'))return;
+  const script=document.createElement("script");
+  script.src="app-decorations.js";
+  script.dataset.rabbitDecorations="1";
+  document.body.appendChild(script);
+}
+
 if(!document.querySelector('script[data-rabbit-features]')){
   const featureScript=document.createElement("script");
   featureScript.src="app-features.js";
   featureScript.dataset.rabbitFeatures="1";
+  featureScript.addEventListener("load",loadDecorationFeatures,{once:true});
   document.body.appendChild(featureScript);
+}else if(typeof runProjectValidation==="function"){
+  loadDecorationFeatures();
+}else{
+  document.querySelector('script[data-rabbit-features]')?.addEventListener("load",loadDecorationFeatures,{once:true});
 }
