@@ -26,6 +26,7 @@
     mapping:{},advanced:localStorage.getItem("lyStudioV4Advanced")==="1",
     history:[],historyIndex:-1,suspend:false,template:"blank"
   };
+  window.lyStudioV4State=state;
   if(!MODES[state.mode])state.mode="basic";
   if(state.step<1||state.step>4)state.step=1;
   const $id=id=>document.getElementById(id);
@@ -42,13 +43,14 @@
   }
   function sourceBoneNames(){
     const names=[];
-    if(typeof detectedBoneNames!=="undefined"&&Array.isArray(detectedBoneNames))names.push(...detectedBoneNames);
     if(typeof bbData!=="undefined"&&bbData){
       const walk=nodes=>{for(const node of nodes||[]){if(node&&typeof node==="object"&&Array.isArray(node.children)){names.push(String(node.name||""));walk(node.children.filter(x=>x&&typeof x==="object"));}}};
       walk(bbData.outliner||[]);
     }
     if(typeof manualGeoData!=="undefined"&&manualGeoData){for(const geo of manualGeoData["minecraft:geometry"]||[])for(const bone of geo.bones||[])names.push(String(bone.name||""));}
-    return [...new Set(names.filter(Boolean))].sort((a,b)=>a.localeCompare(b));
+    if(typeof detectedBoneNames!=="undefined"&&Array.isArray(detectedBoneNames))names.push(...detectedBoneNames);
+    const seen=new Set();
+    return names.filter(Boolean).filter(name=>{const key=norm(name);if(!key||seen.has(key))return false;seen.add(key);return true;}).sort((a,b)=>a.localeCompare(b));
   }
   function autoMapping(){
     const names=sourceBoneNames();const used=new Set();const map={};
