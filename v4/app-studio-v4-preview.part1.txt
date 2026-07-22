@@ -1,0 +1,42 @@
+/* LY Studio v4 — 3D geometry and texture preview */
+(function(){
+  if(window.__lyStudioV4Preview)return;window.__lyStudioV4Preview=true;
+  const $id=id=>document.getElementById(id);
+  let THREERef=null,renderer=null,scene=null,camera=null,modelRoot=null,boneGroups=new Map(),pose="idle",drag=false,lastX=0,lastY=0;
+
+  function createPanels(){
+    if($id("v4PreviewPanel"))return;
+    const card=$id("import")?.querySelector(".card");if(!card)return;
+    const wrap=document.createElement("div");wrap.id="v4PreviewPanel";wrap.className="v4-preview-grid";
+    wrap.innerHTML=`
+      <div class="v4-preview-card"><div class="v4-card-head"><div><h4>พรีวิวโมเดล 3D</h4><p>ลากเพื่อหมุน • เลื่อนเมาส์เพื่อซูม • เปิด–ปิด Bone ได้</p></div><button id="v4ResetView" type="button">รีเซ็ตมุม</button></div><div id="v4CanvasWrap" class="v4-canvas-wrap"><div class="v4-preview-loading">เลือกโมเดลเพื่อเริ่มพรีวิว</div></div><div class="v4-preview-actions"><button data-v4-pose="idle">ยืน</button><button data-v4-pose="walk">เดิน</button><button data-v4-pose="wave">โบกมือ</button><label><input id="v4Wireframe" type="checkbox"> Wireframe</label></div><div id="v4BoneToggles" class="v4-bone-toggles"></div></div>
+      <div class="v4-preview-card"><div class="v4-card-head"><div><h4>Texture Preview</h4><p>ตรวจขนาด ความโปร่งใส และความละเอียดก่อน Build</p></div></div><div id="v4TexturePreview" class="v4-texture-preview"><div class="v4-empty">ยังไม่ได้เลือก Texture</div></div></div>`;
+    card.appendChild(wrap);
+    $id("v4ResetView").onclick=resetView;$id("v4Wireframe").onchange=applyWireframe;
+    wrap.querySelectorAll("[data-v4-pose]").forEach(b=>b.onclick=()=>setPose(b.dataset.v4Pose));
+  }
+
+  function loadThree(){
+    return new Promise((resolve,reject)=>{
+      if(window.THREE){THREERef=window.THREE;resolve();return;}
+      const script=document.createElement("script");script.src="https://cdn.jsdelivr.net/npm/three@0.161.0/build/three.min.js";script.onload=()=>{THREERef=window.THREE;resolve();};script.onerror=()=>reject(new Error("โหลด Three.js ไม่สำเร็จ"));document.head.appendChild(script);
+    });
+  }
+  function ensureScene(){
+    if(renderer||!THREERef)return;
+    const host=$id("v4CanvasWrap");if(!host)return;host.innerHTML="";
+    scene=new THREERef.Scene();camera=new THREERef.PerspectiveCamera(38,1,.1,1000);camera.position.set(38,28,48);
+    renderer=new THREERef.WebGLRenderer({antialias:true,alpha:true});renderer.setPixelRatio(Math.min(devicePixelRatio,2));renderer.outputColorSpace=THREERef.SRGBColorSpace;host.appendChild(renderer.domElement);
+    const hemi=new THREERef.HemisphereLight(0xffffff,0x343245,2.4);scene.add(hemi);const dir=new THREERef.DirectionalLight(0xffffff,2.1);dir.position.set(25,40,30);scene.add(dir);
+    const grid=new THREERef.GridHelper(64,32,0x4d4a65,0x2d2b3e);grid.position.y=0;scene.add(grid);
+    modelRoot=new THREERef.Group();scene.add(modelRoot);
+    const resize=()=>{const r=host.getBoundingClientRect();const w=Math.max(260,r.width),h=Math.max(310,r.height);renderer.setSize(w,h,false);camera.aspect=w/h;camera.updateProjectionMatrix();};new ResizeObserver(resize).observe(host);resize();
+    const canvas=renderer.domElement;canvas.addEventListener("pointerdown",e=>{drag=true;lastX=e.clientX;lastY=e.clientY;canvas.setPointerCapture(e.pointerId)});canvas.addEventListener("pointerup",()=>drag=false);canvas.addEventListener("pointermove",e=>{if(!drag||!modelRoot)return;modelRoot.rotation.y+=(e.clientX-lastX)*.012;modelRoot.rotation.x+=(e.clientY-lastY)*.008;modelRoot.rotation.x=Math.max(-1.2,Math.min(1.2,modelRoot.rotation.x));lastX=e.clientX;lastY=e.clientY;});canvas.addEventListener("wheel",e=>{e.preventDefault();camera.position.multiplyScalar(e.deltaY>0?1.08:.92);camera.position.clampLength(18,140);},{passive:false});
+    (function animate(){requestAnimationFrame(animate);renderer.render(scene,camera);})();
+  }
+  function currentGeometry(){
+    try{
+      if(typeof mode!=="undefined"&&mode==="bbmodel"&&typeof bbData!=="undefined"&&bbData&&typeof convertBBGeometry==="function")return convertBBGeometry(bbData,"geometry.preview");
+      if(typeof manualGeoData!=="undefined"&&manualGeoData)return JSON.parse(JSON.stringify(manualGeoData));
+    }catch(_e){}
+    return null;
