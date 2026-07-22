@@ -1,0 +1,70 @@
+      const items=typeof getDecorations==="function"?getDecorations():[];const toggles=items.filter(x=>x.type==="toggle"),groups=[...new Set(items.filter(x=>x.type==="choice").map(x=>x.group))];
+      root.innerHTML=`<div class="v4-phone"><b>${esc($id("controllerMenuTitle")?.value||"แต่งตัวละคร")}</b><div class="v4-sim-controls">${toggles.map((x,i)=>`<label><input type="checkbox" data-bone="${esc(x.bone)}" ${x.defaultOn?"checked":""}> ${esc(x.label)}</label>`).join("")}${groups.map(g=>`<label>${esc(g)}<select data-group="${esc(g)}"><option value="">ไม่ใส่</option>${items.filter(x=>x.type==="choice"&&x.group===g).map(x=>`<option value="${esc(x.bone)}" ${x.defaultOn?"selected":""}>${esc(x.label)}</option>`).join("")}</select></label>`).join("")}</div><small id="v4SimResult"></small></div>`;
+      const sync=()=>{const visible=[...root.querySelectorAll('input:checked')].map(x=>x.dataset.bone).concat([...root.querySelectorAll("select")].map(x=>x.value).filter(Boolean));$id("v4SimResult").textContent=visible.length?`Bone ที่แสดง: ${visible.join(", ")}`:"ไม่แสดงของตกแต่ง";};root.querySelectorAll("input,select").forEach(x=>x.onchange=sync);sync();
+    }else if(state.mode==="outfit")root.innerHTML=`<div class="v4-phone"><b>ชุดเต็มตัว</b><p>จับคู่ Bone ${ROLES.filter(r=>state.mapping[r.id]).length}/6 ส่วน</p><div class="v4-pose-buttons"><button type="button" data-pose="idle">ยืน</button><button type="button" data-pose="walk">เดิน</button><button type="button" data-pose="wave">โบกมือ</button></div><small>ท่าจะส่งไปยังพรีวิว 3D</small></div>`;
+    else root.innerHTML="<div class='v4-empty'>โหมดนี้ไม่มี Controller</div>";
+    root.querySelectorAll("[data-pose]").forEach(b=>b.onclick=()=>window.lyV4SetPose?.(b.dataset.pose));
+  }
+
+  function createExpressionRow(data={}){
+    const row=document.createElement("div");row.className="expression-row";row.innerHTML=`<span class="drag-dot">⋮⋮</span><input class="expr-label" value="${esc(data.label||"สีหน้า")}"><input class="expr-bone" value="${esc(data.bone||"")}"><input class="expr-icon" value="${esc(data.icon||"")}"><button class="remove-expression" type="button">×</button>`;
+    $id("expressionList")?.appendChild(row);if(typeof bindExpressionRow==="function")bindExpressionRow(row);if(typeof enhanceExpressionRow==="function")enhanceExpressionRow(row);return row;
+  }
+  function resetExpressions(items){const list=$id("expressionList");if(!list)return;list.innerHTML="";items.forEach(createExpressionRow);if(typeof applyFaceMethodToRows==="function")applyFaceMethodToRows();renderSimulator();}
+  function resetDecorations(items){const list=$id("decorationList");if(!list||typeof createDecorationRow!=="function")return;list.innerHTML="";items.forEach(item=>{const row=createDecorationRow(item);row.dataset.category=item.category||"ทั่วไป";row.dataset.icon=item.icon||"";row.dataset.excludes=item.excludes||"";list.appendChild(row);});enhanceRows();if(typeof updateDecorationPreview==="function")updateDecorationPreview();renderSimulator();}
+  function applyTemplate(key){
+    state.template=key;
+    const slot=$id("slot");
+    if(key==="head"){setMode("basic",false);if(slot)slot.value="slot.armor.head";}
+    else if(key==="outfit"){setMode("outfit",false);if(slot)slot.value="slot.armor.chest";autoMapping();}
+    else if(key==="wings"){setMode("decorate",false);if(slot)slot.value="slot.armor.chest";resetDecorations([{label:"ปีก",bone:"Wings",type:"toggle",defaultOn:true}]);}
+    else if(key==="cape"){setMode("decorate",false);if(slot)slot.value="slot.armor.chest";resetDecorations([{label:"ผ้าคลุม",bone:"Cape",type:"toggle",defaultOn:true}]);}
+    else if(key==="faces"){setMode("faces",false);if(slot)slot.value="slot.armor.head";resetExpressions([{label:"ปกติ",bone:"Face_Normal"},{label:"ยิ้ม",bone:"Face_Happy"},{label:"โกรธ",bone:"Face_Angry"},{label:"เศร้า",bone:"Face_Sad"}]);}
+    else if(key==="multioutfit"){setMode("decorate",false);if(slot)slot.value="slot.armor.chest";resetDecorations([{label:"ชุดปกติ",bone:"Outfit_Normal",type:"choice",group:"outfit",defaultOn:true},{label:"ชุดพิเศษ",bone:"Outfit_Special",type:"choice",group:"outfit",defaultOn:false}]);}
+    else setMode("basic",false);
+    document.querySelectorAll("input,select").forEach(x=>x.dispatchEvent(new Event("change",{bubbles:true})));scheduleSave(true);
+  }
+
+  function snapshot(){
+    const fields={};FIELD_IDS.forEach(id=>{const el=$id(id);if(el)fields[id]=el.type==="checkbox"?el.checked:el.value;});
+    const expressions=[...document.querySelectorAll(".expression-row")].map(r=>({label:r.querySelector(".expr-label")?.value||"",bone:r.querySelector(".expr-bone")?.value||"",icon:r.querySelector(".expr-icon")?.value||""}));
+    const decorations=[...document.querySelectorAll(".decoration-row")].map(r=>({label:r.querySelector(".deco-label")?.value||"",bone:r.querySelector(".deco-bone")?.value||"",type:r.querySelector(".deco-type")?.value||"toggle",group:r.querySelector(".deco-group")?.value||"outfit",defaultOn:r.querySelector(".deco-default input")?.checked===true,category:r.dataset.category||"ทั่วไป",icon:r.dataset.icon||"",excludes:r.dataset.excludes||""}));
+    return {version:4,mode:state.mode,step:state.step,advanced:state.advanced,template:state.template,mapping:{...state.mapping},fields,expressions,decorations,faceMethod:typeof getFaceMethod==="function"?getFaceMethod():"bone"};
+  }
+  function applySnapshot(data){
+    if(!data)return;state.suspend=true;
+    try{
+      for(const [id,val] of Object.entries(data.fields||{})){const el=$id(id);if(!el)continue;if(el.type==="checkbox")el.checked=!!val;else el.value=val;el.dispatchEvent(new Event(el.type==="checkbox"?"change":"input",{bubbles:true}));}
+      state.mapping={...(data.mapping||{})};state.advanced=!!data.advanced;$id("v4Advanced")&&($id("v4Advanced").checked=state.advanced);document.body.classList.toggle("v4-advanced",state.advanced);
+      if(Array.isArray(data.expressions)&&data.expressions.length)resetExpressions(data.expressions);
+      if(Array.isArray(data.decorations)&&data.decorations.length)resetDecorations(data.decorations);
+      if(data.faceMethod)document.querySelector(`input[name="faceMethod"][value="${data.faceMethod}"]`)?.click();
+      setMode(data.mode||"basic",false);setStep(data.step||1);renderBoneMapping();
+    }finally{state.suspend=false;}
+  }
+  let saveTimer=null,historyTimer=null;
+  function scheduleSave(pushHistory=false){
+    if(state.suspend)return;clearTimeout(saveTimer);saveTimer=setTimeout(()=>{localStorage.setItem(STORAGE_KEY,JSON.stringify(snapshot()));const status=$id("v4SaveStatus");if(status){status.textContent="บันทึกอัตโนมัติแล้ว";setTimeout(()=>status.textContent="พร้อมบันทึกอัตโนมัติ",1200);}},350);
+    if(pushHistory){clearTimeout(historyTimer);historyTimer=setTimeout(pushSnapshot,250);}
+  }
+  function pushSnapshot(){if(state.suspend)return;const text=JSON.stringify(snapshot());const current=state.history[state.historyIndex];if(current===text)return;state.history=state.history.slice(0,state.historyIndex+1);state.history.push(text);if(state.history.length>40)state.history.shift();state.historyIndex=state.history.length-1;updateHistoryButtons();}
+  function undo(){if(state.historyIndex<=0)return;state.historyIndex--;applySnapshot(JSON.parse(state.history[state.historyIndex]));updateHistoryButtons();}
+  function redo(){if(state.historyIndex>=state.history.length-1)return;state.historyIndex++;applySnapshot(JSON.parse(state.history[state.historyIndex]));updateHistoryButtons();}
+  function updateHistoryButtons(){const u=$id("v4Undo"),r=$id("v4Redo");if(u)u.disabled=state.historyIndex<=0;if(r)r.disabled=state.historyIndex>=state.history.length-1;}
+
+  function enhanceRows(){
+    document.querySelectorAll(".expression-row,.decoration-row").forEach(row=>{
+      if(row.dataset.v4Enhanced==="1")return;row.dataset.v4Enhanced="1";row.draggable=true;
+      const duplicate=document.createElement("button");duplicate.type="button";duplicate.className="v4-duplicate";duplicate.textContent="⧉";duplicate.title="ทำซ้ำ";row.appendChild(duplicate);
+      duplicate.onclick=()=>{if(row.classList.contains("expression-row")){const d={label:row.querySelector(".expr-label")?.value+" สำเนา",bone:row.querySelector(".expr-bone")?.value,icon:row.querySelector(".expr-icon")?.value};row.after(createExpressionRow(d));}else{const d={label:row.querySelector(".deco-label")?.value+" สำเนา",bone:row.querySelector(".deco-bone")?.value,type:row.querySelector(".deco-type")?.value,group:row.querySelector(".deco-group")?.value,defaultOn:false};const newRow=createDecorationRow(d);row.after(newRow);enhanceRows();}scheduleSave(true);renderSimulator();};
+      if(row.classList.contains("decoration-row")){const details=document.createElement("details");details.className="v4-row-extra";details.innerHTML=`<summary>หมวด ไอคอน และเงื่อนไข</summary><div><label>หมวด<input class="v4-category" value="${esc(row.dataset.category||"ทั่วไป")}"></label><label>ไอคอน<input class="v4-icon" value="${esc(row.dataset.icon||"")}" placeholder="เช่น 👓"></label><label>ปิด Bone อื่นเมื่อเปิด<input class="v4-excludes" value="${esc(row.dataset.excludes||"")}" placeholder="Hair, Hat"></label></div>`;row.appendChild(details);details.querySelectorAll("input").forEach(input=>input.oninput=()=>{row.dataset[input.className.replace("v4-","")]=input.value;scheduleSave(true);});}
+      row.addEventListener("dragstart",()=>{window.__v4DraggedRow=row;row.classList.add("dragging")});row.addEventListener("dragend",()=>{row.classList.remove("dragging");window.__v4DraggedRow=null;scheduleSave(true);renderSimulator();});row.addEventListener("dragover",e=>e.preventDefault());row.addEventListener("drop",e=>{e.preventDefault();const dragged=window.__v4DraggedRow;if(!dragged||dragged===row||dragged.parentElement!==row.parentElement)return;const rect=row.getBoundingClientRect();row.parentElement.insertBefore(dragged,e.clientY<rect.top+rect.height/2?row:row.nextSibling);});
+    });
+  }
+
+  const baseGetDecorations=typeof getDecorations==="function"?getDecorations:null;
+  if(baseGetDecorations){getDecorations=function(){return baseGetDecorations().map((item,index)=>{const row=document.querySelectorAll(".decoration-row")[index];const category=row?.dataset.category||"ทั่วไป",icon=row?.dataset.icon||"",excludes=(row?.dataset.excludes||"").split(",").map(x=>x.trim()).filter(Boolean);return {...item,label:category&&category!=="ทั่วไป"?`${category} • ${icon?icon+" ":""}${item.label}`:`${icon?icon+" ":""}${item.label}`,category,icon,excludes};});};}
+  const baseBuildDecorationPlan=typeof buildDecorationPlan==="function"?buildDecorationPlan:null;
+  if(baseBuildDecorationPlan){buildDecorationPlan=function(decorations=getDecorations()){const plan=baseBuildDecorationPlan(decorations);for(const stateItem of plan.states||[]){for(const item of decorations){if(stateItem.visibility?.[item.bone]&&Array.isArray(item.excludes))for(const bone of item.excludes)stateItem.visibility[bone]=false;}}return plan;};}
+
+  async function importAddon(file){
