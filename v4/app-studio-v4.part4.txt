@@ -51,7 +51,7 @@
   });
 
   function bindGlobalEvents(){
-    document.addEventListener("input",e=>{if(e.target.matches("input,select,textarea")){scheduleSave(true);renderSimulator();}});document.addEventListener("change",e=>{if(e.target.matches("input,select,textarea")){scheduleSave(true);renderBoneMapping();renderSimulator();window.lyV4RefreshPreview?.();}});
+    document.addEventListener("input",e=>{if(e.target.closest?.("#v4Simulator"))return;if(e.target.matches("input,select,textarea")){scheduleSave(true);renderSimulator();}});document.addEventListener("change",e=>{if(e.target.closest?.("#v4Simulator"))return;if(e.target.matches("input,select,textarea")){scheduleSave(true);renderBoneMapping();renderSimulator();window.lyV4RefreshPreview?.();}});
     const observer=new MutationObserver(records=>{if(records.every(r=>r.target.closest?.("#v4Simulator")))return;enhanceRows();setTimeout(renderSimulator,0);});observer.observe(document.body,{childList:true,subtree:true});
     window.addEventListener("beforeunload",()=>localStorage.setItem(STORAGE_KEY,JSON.stringify(snapshot())));
   }
