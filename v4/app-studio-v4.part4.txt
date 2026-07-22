@@ -1,0 +1,61 @@
+    if(!file)return;const status=$id("v4SaveStatus");if(status)status.textContent="กำลังอ่าน Add-on...";
+    try{
+      if(typeof extractPacksFromFile!=="function")throw new Error("ระบบอ่าน ZIP ยังไม่พร้อม");
+      const packs=await extractPacksFromFile(file);const rp=packs.find(p=>p.kind==="rp")||packs[0],bp=packs.find(p=>p.kind==="bp");if(!rp)throw new Error("ไม่พบ Resource Pack");
+      const entries=Object.values(rp.zip.files).filter(x=>!x.dir);const geoEntry=entries.find(x=>/models\/entity\/.*\.geo\.json$/i.test(x.name))||entries.find(x=>/\.geo\.json$/i.test(x.name));const texEntry=entries.find(x=>/textures\/entity\/.*\.png$/i.test(x.name))||entries.find(x=>/\.png$/i.test(x.name));if(!geoEntry||!texEntry)throw new Error("ไม่พบ Geometry หรือ Texture ใน Add-on");
+      const geoText=await geoEntry.async("string");const geo=JSON.parse(geoText);const texBlob=await texEntry.async("blob");const baseName=geoEntry.name.split("/").pop().replace(/\.geo\.json$/i,"");
+      manualGeoData=geo;mode="manual";document.querySelector('.mode-tab[data-mode="manual"]')?.click();
+      const geoFile=new File([geoText],geoEntry.name.split("/").pop(),{type:"application/json"});const texFile=new File([texBlob],texEntry.name.split("/").pop(),{type:"image/png"});assignFile("geoFile",geoFile);assignFile("textureFile",texFile);assignFile("iconFile",texFile);
+      const manifest=rp.manifest||{};$id("packName")&&($id("packName").value=String(manifest.header?.name||baseName).replace(/\s+RP.*$/i,""));$id("customerFileName")&&($id("customerFileName").value=baseName);$id("itemName")&&($id("itemName").value=baseName.toLowerCase().replace(/[^a-z0-9_]/g,"_"));
+      if(bp){const itemEntry=Object.values(bp.zip.files).find(x=>!x.dir&&/items\/.*\.json$/i.test(x.name));if(itemEntry){const itemJson=JSON.parse(await itemEntry.async("string"));const id=itemJson?.["minecraft:item"]?.description?.identifier;if(id&&$id("itemName"))$id("itemName").value=id.split(":").pop();}}
+      inspectGeometry(geo,false);setMode("basic",false);setStep(3);scheduleSave(true);window.lyV4RefreshPreview?.();if(status)status.textContent="นำเข้า Add-on สำเร็จ";
+    }catch(error){if(status)status.textContent=`นำเข้าไม่สำเร็จ: ${error.message}`;}
+    finally{$id("v4AddonImport").value="";}
+  }
+  function assignFile(id,file){const input=$id(id);if(!input)return;const dt=new DataTransfer();dt.items.add(file);input.files=dt.files;input.dispatchEvent(new Event("change",{bubbles:true}));}
+
+  function v4Problems(){
+    const problems=[];const names=sourceBoneNames();
+    if(state.mode!=="merge"&&!names.length)problems.push({type:"warning",text:"ยังไม่พบรายชื่อ Bone จากโมเดล"});
+    if(state.mode==="outfit"){
+      const missing=ROLES.filter(r=>!state.mapping[r.id]);if(missing.length)problems.push({type:"error",text:`ชุดเต็มตัวยังไม่ได้จับคู่: ${missing.map(x=>x.label).join(", ")}`});
+      const values=Object.values(state.mapping).filter(Boolean);if(new Set(values).size!==values.length)problems.push({type:"error",text:"Bone ชุดเต็มตัวถูกเลือกซ้ำ"});
+    }
+    const info=window.lyV4TextureInfo;if(state.mode!=="merge"&&info){if(info.width>2048||info.height>2048)problems.push({type:"warning",text:`Texture ${info.width}×${info.height} มีขนาดใหญ่มาก`});if(!info.powerOfTwo)problems.push({type:"warning",text:`Texture ${info.width}×${info.height} ไม่ใช่ขนาดกำลังสอง`});}
+    if(state.mode==="faces"&&document.querySelectorAll(".expression-row").length>16)problems.push({type:"warning",text:"สีหน้ามากกว่า 16 แบบ เมนูในเกมอาจยาว"});
+    return problems;
+  }
+  const baseValidation=typeof runProjectValidation==="function"?runProjectValidation:null;
+  if(baseValidation){runProjectValidation=function(showStatus=true){const base=baseValidation(false);const problems=[...(base.problems||[]),...v4Problems()];const unique=problems.filter((x,i,a)=>a.findIndex(y=>y.type===x.type&&y.text===x.text)===i);const result={problems:unique,errors:unique.filter(x=>x.type==="error").length,warnings:unique.filter(x=>x.type==="warning").length};result.ok=result.errors===0;renderV4Validation(result);if(showStatus&&typeof setStatus==="function")setStatus(result.errors?`พบ ${result.errors} ข้อผิดพลาด`:result.warnings?`ตรวจผ่าน มี ${result.warnings} คำเตือน`:"ตรวจผ่าน พร้อม Build");return result;};}
+  function renderV4Validation(result){const list=$id("v4ValidationList");if(!list)return;list.innerHTML=result.problems.length?result.problems.map(x=>`<li class="${x.type}"><i>${x.type==="error"?"×":"!"}</i><span>${esc(x.text)}</span></li>`).join(""):'<li class="success"><i>✓</i><span>พร้อมสร้าง Add-on</span></li>';}
+
+  function setMode(key,advance=false){if(!MODES[key])return;state.mode=key;localStorage.setItem("lyStudioV4Mode",key);setLegacyMode(key);document.body.dataset.v4Mode=key;document.querySelectorAll(".v4-mode").forEach(x=>x.classList.toggle("active",x.dataset.mode===key));if(key==="outfit"&&!Object.values(state.mapping).some(Boolean))autoMapping();state.step=key==="merge"?2:(advance?2:Math.max(1,state.step));applyVisibility();renderSimulator();scheduleSave(true);}
+  function setStep(step){if(state.mode==="merge")state.step=2;else state.step=Math.max(1,Math.min(4,step));localStorage.setItem("lyStudioV4Step",String(state.step));applyVisibility();}
+  function applyVisibility(){
+    ["import","project","geometry","build","controller","merge"].forEach(id=>$id(id)?.classList.add("v4-section-hidden"));
+    if(state.mode==="merge")$id("merge")?.classList.remove("v4-section-hidden");
+    else if(state.step===2)$id("import")?.classList.remove("v4-section-hidden");
+    else if(state.step===3){$id("project")?.classList.remove("v4-section-hidden");$id("geometry")?.classList.remove("v4-section-hidden");if(state.mode!=="basic")$id("controller")?.classList.remove("v4-section-hidden");}
+    else if(state.step===4)$id("build")?.classList.remove("v4-section-hidden");
+    document.querySelectorAll("[data-v4-step]").forEach(b=>{const n=Number(b.dataset.v4Step);b.classList.toggle("active",n===state.step);b.disabled=state.mode==="merge"&&n!==2;});
+    const back=$id("v4Back"),next=$id("v4Next");if(back)back.disabled=state.step<=1||state.mode==="merge";if(next){next.disabled=state.step>=4||state.mode==="merge";next.textContent=state.step===3?"ไปตรวจสอบ →":"ถัดไป →";}
+    $id("v4BonePanel")?.classList.toggle("v4-hidden",state.mode!=="outfit");$id("v4Simulator")?.classList.toggle("v4-hidden",!["faces","decorate","outfit"].includes(state.mode));
+    window.scrollTo({top:0,behavior:"smooth"});
+  }
+
+  const baseProjectSettings=typeof projectSettingsObject==="function"?projectSettingsObject:null;
+  if(baseProjectSettings){projectSettingsObject=function(){const data=baseProjectSettings();data.studioV4=snapshot();return data;};}
+  document.addEventListener("change",async event=>{
+    if(event.target.id!=="openProjectFile"||!event.target.files?.[0])return;
+    try{const data=JSON.parse(await event.target.files[0].text());if(data.studioV4)setTimeout(()=>applySnapshot(data.studioV4),80);}catch(_e){}
+  });
+
+  function bindGlobalEvents(){
+    document.addEventListener("input",e=>{if(e.target.matches("input,select,textarea")){scheduleSave(true);renderSimulator();}});document.addEventListener("change",e=>{if(e.target.matches("input,select,textarea")){scheduleSave(true);renderBoneMapping();renderSimulator();window.lyV4RefreshPreview?.();}});
+    const observer=new MutationObserver(records=>{if(records.every(r=>r.target.closest?.("#v4Simulator")))return;enhanceRows();setTimeout(renderSimulator,0);});observer.observe(document.body,{childList:true,subtree:true});
+    window.addEventListener("beforeunload",()=>localStorage.setItem(STORAGE_KEY,JSON.stringify(snapshot())));
+  }
+  function restore(){try{const data=JSON.parse(localStorage.getItem(STORAGE_KEY)||"null");if(data?.version===4)applySnapshot(data);}catch(_e){}pushSnapshot();}
+  function start(){loadCss();createShell();createBonePanel();createValidationPanel();createSimulator();enhanceRows();bindGlobalEvents();document.body.classList.toggle("v4-advanced",state.advanced);setMode(state.mode,false);setStep(state.step);restore();renderBoneMapping();renderSimulator();window.lyV4RefreshPreview?.();}
+  if(document.readyState==="loading")document.addEventListener("DOMContentLoaded",start,{once:true});else start();
+})();
