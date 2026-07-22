@@ -1,0 +1,41 @@
+  }
+  function clearModel(){if(!modelRoot)return;while(modelRoot.children.length){const child=modelRoot.children[0];modelRoot.remove(child);child.traverse?.(obj=>{obj.geometry?.dispose?.();if(Array.isArray(obj.material))obj.material.forEach(m=>m.dispose?.());else obj.material?.dispose?.();});}boneGroups.clear();}
+  function renderGeometry(){
+    if(!THREERef||!renderer)return;clearModel();const data=currentGeometry();const host=$id("v4CanvasWrap");if(!data){host?.querySelector(".v4-preview-loading")||(host?.insertAdjacentHTML("beforeend",'<div class="v4-preview-loading">เลือกโมเดลเพื่อเริ่มพรีวิว</div>'));renderBoneToggles([]);return;}
+    host?.querySelector(".v4-preview-loading")?.remove();const geo=data?.["minecraft:geometry"]?.[0];const bones=geo?.bones||[];const byName=new Map();
+    for(const bone of bones){const group=new THREERef.Group();group.name=String(bone.name||"bone");const pivot=Array.isArray(bone.pivot)?bone.pivot:[0,0,0];group.userData.pivot=pivot;group.position.set(pivot[0],pivot[1],pivot[2]);const rot=Array.isArray(bone.rotation)?bone.rotation:[0,0,0];group.rotation.set(THREERef.MathUtils.degToRad(rot[0]||0),THREERef.MathUtils.degToRad(rot[1]||0),THREERef.MathUtils.degToRad(rot[2]||0));byName.set(group.name,{group,bone});boneGroups.set(group.name,group);}
+    for(const {group,bone} of byName.values()){if(bone.parent&&byName.has(String(bone.parent))){const parent=byName.get(String(bone.parent));const pp=parent.group.userData.pivot;group.position.set(group.userData.pivot[0]-pp[0],group.userData.pivot[1]-pp[1],group.userData.pivot[2]-pp[2]);parent.group.add(group);}else modelRoot.add(group);}
+    const wire=$id("v4Wireframe")?.checked===true;
+    for(const {group,bone} of byName.values()){
+      for(const cube of bone.cubes||[]){const origin=Array.isArray(cube.origin)?cube.origin:[0,0,0],size=Array.isArray(cube.size)?cube.size:[1,1,1];const geometry=new THREERef.BoxGeometry(Math.max(.02,size[0]),Math.max(.02,size[1]),Math.max(.02,size[2]));const material=new THREERef.MeshStandardMaterial({color:0xb9a9ff,roughness:.72,metalness:.04,transparent:true,opacity:.94,wireframe:wire});const mesh=new THREERef.Mesh(geometry,material);const pivot=group.userData.pivot;mesh.position.set(origin[0]+size[0]/2-pivot[0],origin[1]+size[1]/2-pivot[1],origin[2]+size[2]/2-pivot[2]);if(Array.isArray(cube.rotation)){const cp=Array.isArray(cube.pivot)?cube.pivot:pivot;const holder=new THREERef.Group();holder.position.set(cp[0]-pivot[0],cp[1]-pivot[1],cp[2]-pivot[2]);mesh.position.sub(new THREERef.Vector3(cp[0]-pivot[0],cp[1]-pivot[1],cp[2]-pivot[2]));holder.rotation.set(...cube.rotation.map(v=>THREERef.MathUtils.degToRad(v||0)));holder.add(mesh);group.add(holder);}else group.add(mesh);}
+      if(bone.poly_mesh){const marker=new THREERef.Mesh(new THREERef.SphereGeometry(.35,10,8),new THREERef.MeshStandardMaterial({color:0x56c9ff}));group.add(marker);}
+    }
+    centerModel();renderBoneToggles([...boneGroups.keys()]);setPose(pose);
+  }
+  function centerModel(){if(!modelRoot||!camera)return;const box=new THREERef.Box3().setFromObject(modelRoot);if(box.isEmpty())return;const center=box.getCenter(new THREERef.Vector3()),size=box.getSize(new THREERef.Vector3()),max=Math.max(size.x,size.y,size.z,8);modelRoot.position.set(-center.x,-box.min.y,-center.z);camera.position.set(max*1.35,max*.9,max*1.65);camera.lookAt(0,max*.45,0);modelRoot.rotation.set(0,0,0);}
+  function resetView(){centerModel();}
+  function applyWireframe(){modelRoot?.traverse(obj=>{if(obj.material&&"wireframe" in obj.material)obj.material.wireframe=$id("v4Wireframe")?.checked===true;});}
+  function roleGroup(role){const keys={head:["head"],body:["body","waist","torso"],rightArm:["rightarm","right_arm","rarm"],leftArm:["leftarm","left_arm","larm"],rightLeg:["rightleg","right_leg","rleg"],leftLeg:["leftleg","left_leg","lleg"]}[role]||[];for(const [name,g] of boneGroups){const key=String(name).toLowerCase().replace(/[^a-z0-9_]/g,"");if(keys.some(x=>key===x||key.replace(/_/g,"")===x.replace(/_/g,"")))return g;}return null;}
+  function setPose(next){pose=next||"idle";for(const g of boneGroups.values()){const base=g.userData.baseRotation||(g.userData.baseRotation={x:g.rotation.x,y:g.rotation.y,z:g.rotation.z});g.rotation.set(base.x,base.y,base.z);}const ra=roleGroup("rightArm"),la=roleGroup("leftArm"),rl=roleGroup("rightLeg"),ll=roleGroup("leftLeg");if(pose==="walk"){if(ra)ra.rotation.x-=.65;if(la)la.rotation.x+=.65;if(rl)rl.rotation.x+=.55;if(ll)ll.rotation.x-=.55;}else if(pose==="wave"){if(ra){ra.rotation.z-=1.35;ra.rotation.x-=.45;}if(la)la.rotation.x+=.15;}$id("v4PreviewPanel")?.querySelectorAll("[data-v4-pose]").forEach(b=>b.classList.toggle("active",b.dataset.v4Pose===pose));}
+  window.lyV4SetPose=setPose;
+  function renderBoneToggles(names){const root=$id("v4BoneToggles");if(!root)return;root.innerHTML=names.length?names.map(n=>`<label><input type="checkbox" checked data-bone-name="${String(n).replace(/"/g,"&quot;")}"> ${n}</label>`).join(""):'<span>ยังไม่มี Bone</span>';root.querySelectorAll("input").forEach(input=>input.onchange=()=>{const g=boneGroups.get(input.dataset.boneName);if(g)g.visible=input.checked;});}
+
+  function textureSource(){
+    if(typeof mode!=="undefined"&&mode==="bbmodel"){
+      if(typeof bbData!=="undefined"&&bbData&&typeof extractEmbeddedTexture==="function"){const embedded=extractEmbeddedTexture(bbData);if(embedded)return embedded;}
+      return $id("fallbackTexture")?.files?.[0]||null;
+    }
+    return $id("textureFile")?.files?.[0]||null;
+  }
+  async function renderTexture(){
+    const root=$id("v4TexturePreview");if(!root)return;const old=root.querySelector("img")?.dataset.objectUrl;if(old)URL.revokeObjectURL(old);const file=textureSource();if(!file){root.innerHTML='<div class="v4-empty">ยังไม่ได้เลือก Texture</div>';window.lyV4TextureInfo=null;return;}
+    const url=URL.createObjectURL(file);try{const info=await new Promise((resolve,reject)=>{const img=new Image();img.onload=()=>resolve({img,width:img.naturalWidth,height:img.naturalHeight});img.onerror=reject;img.src=url;});const power=n=>n>0&&(n&(n-1))===0;const canvas=document.createElement("canvas");canvas.width=info.width;canvas.height=info.height;const ctx=canvas.getContext("2d",{willReadFrequently:true});ctx.drawImage(info.img,0,0);let alpha=false;try{const data=ctx.getImageData(0,0,info.width,info.height).data;for(let i=3;i<data.length;i+=Math.max(4,Math.floor(data.length/20000/4)*4)){if(data[i]<255){alpha=true;break;}}}catch(_e){}window.lyV4TextureInfo={width:info.width,height:info.height,powerOfTwo:power(info.width)&&power(info.height),alpha,size:file.size||0};root.innerHTML=`<img src="${url}" alt="Texture"><div><b>${info.width} × ${info.height}px</b><span>${formatBytes(file.size||0)} • ${alpha?"มีความโปร่งใส":"ทึบทั้งหมด"}</span><small>${window.lyV4TextureInfo.powerOfTwo?"✓ ขนาดมาตรฐาน":"! แนะนำใช้ 64, 128, 256, 512 หรือ 1024"}</small></div>`;root.querySelector("img").dataset.objectUrl=url;return;}catch(_e){root.innerHTML='<div class="v4-empty">เปิด Texture ไม่สำเร็จ</div>';window.lyV4TextureInfo=null;URL.revokeObjectURL(url);}
+  }
+  function formatBytes(n){if(n<1024)return `${n} B`;if(n<1048576)return `${(n/1024).toFixed(1)} KB`;return `${(n/1048576).toFixed(1)} MB`;}
+
+  async function refresh(){createPanels();try{await loadThree();ensureScene();renderGeometry();}catch(error){const host=$id("v4CanvasWrap");if(host)host.innerHTML=`<div class="v4-preview-loading">${error.message}</div>`;}renderTexture();}
+  window.lyV4RefreshPreview=()=>setTimeout(refresh,20);
+  const originalInspect=typeof inspectGeometry==="function"?inspectGeometry:null;if(originalInspect){inspectGeometry=function(data,fromBB=false){const result=originalInspect(data,fromBB);setTimeout(refresh,30);return result;};}
+  function start(){createPanels();refresh();document.addEventListener("change",e=>{if(["bbFile","geoFile","textureFile","fallbackTexture"].includes(e.target.id))setTimeout(refresh,30);});}
+  if(document.readyState==="loading")document.addEventListener("DOMContentLoaded",start,{once:true});else start();
+})();
