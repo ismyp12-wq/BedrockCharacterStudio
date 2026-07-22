@@ -1,0 +1,70 @@
+/* LY Bedrock Character Studio v4 — unified production workflow */
+(function(){
+  if(window.__lyStudioV4)return;
+  window.__lyStudioV4=true;
+
+  const MODES={
+    basic:{legacy:"none",icon:"◇",title:"โมเดลทั่วไป",desc:"หัว ผม หมวก อาวุธ หรือของสวมหนึ่งชิ้น"},
+    outfit:{legacy:"outfit",icon:"♙",title:"ชุดเต็มตัว",desc:"ผูกหัว ตัว แขน และขาให้ขยับตามผู้เล่น"},
+    faces:{legacy:"expressions",icon:"☺",title:"ระบบสีหน้า",desc:"สลับด้วย Bone, Texture หรือโมเดลแยก"},
+    decorate:{legacy:"decorations",icon:"✦",title:"UI แต่งตัว",desc:"เปิด–ปิดของตกแต่งและเลือกชุดในเกม"},
+    merge:{legacy:"merge",icon:"⇄",title:"รวม Add-on",desc:"รวม .mcaddon และ .mcpack หลายไฟล์"}
+  };
+  const ROLES=[
+    {id:"head",label:"หัว",aliases:["head","headwear","hat","neckhead"]},
+    {id:"body",label:"ลำตัว",aliases:["body","torso","chest","waist","root"]},
+    {id:"rightArm",label:"แขนขวา",aliases:["rightarm","rarm","rightshoulder","armright"]},
+    {id:"leftArm",label:"แขนซ้าย",aliases:["leftarm","larm","leftshoulder","armleft"]},
+    {id:"rightLeg",label:"ขาขวา",aliases:["rightleg","rleg","legright"]},
+    {id:"leftLeg",label:"ขาซ้าย",aliases:["leftleg","lleg","legleft"]}
+  ];
+  const FIELD_IDS=["packName","author","customerFileName","itemName","displayTh","displayEn","slot","version","controllerDisplayName","controllerMenuTitle","controllerMenuBody","mergeOutputName","useAnimation","hideHelmet","includeSource","includeReadme","autoGiveController","regenerateMergeUuids","keepMergeDocs"];
+  const STORAGE_KEY="lyStudioV4Project";
+  const state={
+    mode:localStorage.getItem("lyStudioV4Mode")||"basic",
+    step:Number(localStorage.getItem("lyStudioV4Step")||1),
+    mapping:{},advanced:localStorage.getItem("lyStudioV4Advanced")==="1",
+    history:[],historyIndex:-1,suspend:false,template:"blank"
+  };
+  if(!MODES[state.mode])state.mode="basic";
+  if(state.step<1||state.step>4)state.step=1;
+  const $id=id=>document.getElementById(id);
+  const norm=value=>String(value||"").toLowerCase().replace(/[^a-z0-9]/g,"");
+  const esc=value=>String(value??"").replace(/[&<>"']/g,ch=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#039;"}[ch]));
+
+  function loadCss(){
+    if(document.querySelector('link[data-ly-studio-v4]'))return;
+    const link=document.createElement("link");link.rel="stylesheet";link.href="studio-v4.css";link.dataset.lyStudioV4="1";document.head.appendChild(link);
+  }
+  function setLegacyMode(key){
+    const radio=document.querySelector(`input[name="controllerMode"][value="${MODES[key].legacy}"]`);
+    if(radio&&!radio.checked){radio.checked=true;radio.dispatchEvent(new Event("change",{bubbles:true}));}
+  }
+  function sourceBoneNames(){
+    const names=[];
+    if(typeof detectedBoneNames!=="undefined"&&Array.isArray(detectedBoneNames))names.push(...detectedBoneNames);
+    if(typeof bbData!=="undefined"&&bbData){
+      const walk=nodes=>{for(const node of nodes||[]){if(node&&typeof node==="object"&&Array.isArray(node.children)){names.push(String(node.name||""));walk(node.children.filter(x=>x&&typeof x==="object"));}}};
+      walk(bbData.outliner||[]);
+    }
+    if(typeof manualGeoData!=="undefined"&&manualGeoData){for(const geo of manualGeoData["minecraft:geometry"]||[])for(const bone of geo.bones||[])names.push(String(bone.name||""));}
+    return [...new Set(names.filter(Boolean))].sort((a,b)=>a.localeCompare(b));
+  }
+  function autoMapping(){
+    const names=sourceBoneNames();const used=new Set();const map={};
+    for(const role of ROLES){
+      let best=null,bestScore=-1;
+      for(const name of names){
+        if(used.has(name))continue;const key=norm(name);let score=0;
+        for(const alias of role.aliases){if(key===alias)score=Math.max(score,100);else if(key.includes(alias)||alias.includes(key))score=Math.max(score,60);}
+        if(role.id==="rightArm"&&/right.*arm|arm.*right|rarm/.test(key))score=Math.max(score,90);
+        if(role.id==="leftArm"&&/left.*arm|arm.*left|larm/.test(key))score=Math.max(score,90);
+        if(role.id==="rightLeg"&&/right.*leg|leg.*right|rleg/.test(key))score=Math.max(score,90);
+        if(role.id==="leftLeg"&&/left.*leg|leg.*left|lleg/.test(key))score=Math.max(score,90);
+        if(score>bestScore){best=name;bestScore=score;}
+      }
+      if(best&&bestScore>0){map[role.id]=best;used.add(best);}
+    }
+    state.mapping=map;renderBoneMapping();scheduleSave(true);window.lyV4RefreshPreview?.();
+  }
+
