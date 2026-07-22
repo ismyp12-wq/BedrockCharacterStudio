@@ -4,7 +4,7 @@
   window.__lyStudioV4Loader=true;
 
   document.title="LY Bedrock Character Studio v4";
-  const version="4.0.1";
+  const version="4.1.0";
   const read=async path=>{
     const response=await fetch(`${path}?v=${version}`,{cache:"no-store"});
     if(!response.ok)throw new Error(`โหลด ${path} ไม่สำเร็จ (${response.status})`);
@@ -26,6 +26,9 @@
       "v4/app-studio-v4-preview.part2.txt"
     ]);
     new Function(`${preview}\n//# sourceURL=app-studio-v4-preview.js`)();
+
+    const multiTexture=await read("app-multitexture-v4.js");
+    new Function(`${multiTexture}\n//# sourceURL=app-multitexture-v4.js`)();
 
     const title=document.querySelector(".topbar h1");
     if(title)title.textContent="Bedrock Character Studio v4";
