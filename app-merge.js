@@ -163,3 +163,10 @@ $("mergeBtn").addEventListener("click",async()=>{
     button.disabled=!(mergeInspection?.packs?.length);
   }
 });
+
+if(!document.querySelector('script[data-rabbit-features]')){
+  const featureScript=document.createElement("script");
+  featureScript.src="app-features.js";
+  featureScript.dataset.rabbitFeatures="1";
+  document.body.appendChild(featureScript);
+}
