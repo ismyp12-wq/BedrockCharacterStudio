@@ -1,3 +1,39 @@
+let itemIdTouched=false;
+const itemIdField=$("itemName");
+const originalCustomerItemId=customerItemId;
+function editableItemSuffix(value){
+  return cleanId(String(value||"").replace(/^ly\s*[:\-_ ]*/i,""),"customer_model");
+}
+function applyEditableItemId(value,markTouched=false){
+  if(!itemIdField)return;
+  if(markTouched)itemIdTouched=true;
+  const item=editableItemSuffix(value);
+  itemIdField.value=item;
+  itemIdField.readOnly=false;
+  $("namespace").value="ly";
+  $("namespace").readOnly=true;
+  $("geometryId").value=`geometry.ly.${item}`;
+  $("animationId").value=`animation.ly.${item}.idle_motion`;
+  $("giveCommand").textContent=`/give @s ly:${item} 1`;
+  if($("controllerItemName")){
+    $("controllerItemName").value=`${item}_controller`;
+    $("controllerItemName").readOnly=true;
+  }
+  if($("controllerGiveCommand"))$("controllerGiveCommand").textContent=`/give @s ly:${item}_controller 1`;
+  const label=itemIdField.closest("label")?.querySelector("span");
+  if(label)label.textContent="Item ID (แก้ได้ • เริ่มด้วย LY อัตโนมัติ)";
+}
+customerItemId=function(){return editableItemSuffix(itemIdField?.value)};
+if(itemIdField){
+  itemIdField.readOnly=false;
+  applyEditableItemId(itemIdField.value,false);
+  itemIdField.addEventListener("input",()=>applyEditableItemId(itemIdField.value,true));
+  $("customerFileName")?.addEventListener("input",()=>{
+    if(!itemIdTouched)applyEditableItemId(originalCustomerItemId($("customerFileName").value),false);
+    else applyEditableItemId(itemIdField.value,false);
+  });
+}
+
 $("buildBtn").addEventListener("click",async()=>{
   const btn=$("buildBtn");
   try{
