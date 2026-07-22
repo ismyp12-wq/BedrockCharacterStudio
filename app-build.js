@@ -34,6 +34,36 @@ if(itemIdField){
   });
 }
 
+function makeSimpleExpressionRenderControllers(ns,item,count){
+  const controllers={};
+  for(let i=0;i<count;i++){
+    controllers[`controller.render.${ns}.${item}.expr_${i}`]={
+      geometry:"Geometry.default",
+      materials:[{"*":"Material.default"}],
+      textures:["Texture.default"]
+    };
+  }
+  return {format_version:"1.8.0",render_controllers:controllers};
+}
+
+async function readExpressionModel(file,geometryIdentifier){
+  const data=JSON.parse(await file.text());
+  const isBB=file.name.toLowerCase().endsWith(".bbmodel")||Array.isArray(data.outliner)||Array.isArray(data.elements);
+  if(isBB){
+    return {
+      geometry:convertBBGeometry(data,geometryIdentifier),
+      embeddedTexture:extractEmbeddedTexture(data),
+      sourceType:"bbmodel"
+    };
+  }
+  const geometry=JSON.parse(JSON.stringify(data));
+  const geos=geometry["minecraft:geometry"];
+  if(!Array.isArray(geos)||!geos.length)throw new Error(`ไฟล์ ${file.name} ไม่พบ minecraft:geometry`);
+  geos[0].description=geos[0].description||{};
+  geos[0].description.identifier=geometryIdentifier;
+  return {geometry,embeddedTexture:null,sourceType:"geometry"};
+}
+
 $("buildBtn").addEventListener("click",async()=>{
   const btn=$("buildBtn");
   try{
@@ -50,6 +80,7 @@ $("buildBtn").addEventListener("click",async()=>{
     const author=$("author").value.trim()||"Unknown";
     const outputBase=lyFileBase($("customerFileName")?.value,"Customer_Head");
     const controllerEnabled=getControllerMode()==="expressions";
+    const expressionMethod=typeof getFaceMethod==="function"?getFaceMethod():"bone";
     const controllerItem=`${item}_controller`;
     const controllerDisplayName=$("controllerDisplayName")?.value.trim()||`${outputBase} Controller`;
     const controllerMenuTitle=$("controllerMenuTitle")?.value.trim()||"เลือกสีหน้า";
@@ -76,6 +107,55 @@ $("buildBtn").addEventListener("click",async()=>{
       if($("useAnimation").checked&&$("animationFile").files[0])animation=JSON.parse(await $("animationFile").files[0].text());
       if($("includeSource").checked){
         for(const id of ["geoFile","textureFile","iconFile","animationFile"])if($(id).files[0])sources.push($(id).files[0]);
+      }
+    }
+
+    const variants=[];
+    if(controllerEnabled){
+      for(let index=0;index<expressions.length;index++){
+        const expression=expressions[index];
+        const suffix=index?`_expr_${index}`:"";
+        const variantItem=`${item}${suffix}`;
+        const variantGeometryId=expressionMethod==="model"&&index>0?`geometry.${ns}.${item}.expr_${index}`:geometryId;
+        let variantGeometry=geometry;
+        let variantTexture=texture;
+        let geometryFileName=`${item}.geo.json`;
+        let textureFileName=`${item}.png`;
+
+        if(expressionMethod==="texture"){
+          if(expression.textureFile)variantTexture=expression.textureFile;
+          else if(index>0)throw new Error(`สีหน้า “${expression.label}” ยังไม่มี Texture PNG`);
+          textureFileName=index?`${item}_expr_${index}.png`:`${item}.png`;
+        }else if(expressionMethod==="model"){
+          if(expression.modelFile){
+            const read=await readExpressionModel(expression.modelFile,variantGeometryId);
+            variantGeometry=read.geometry;
+            variantTexture=expression.textureFile||read.embeddedTexture||texture;
+            geometryFileName=index?`${item}_expr_${index}.geo.json`:`${item}.geo.json`;
+            textureFileName=index?`${item}_expr_${index}.png`:`${item}.png`;
+            if($("includeSource").checked)sources.push(expression.modelFile);
+          }else if(index>0){
+            throw new Error(`สีหน้า “${expression.label}” ยังไม่มีไฟล์โมเดล`);
+          }
+          if(expression.textureFile){
+            variantTexture=expression.textureFile;
+            if($("includeSource").checked)sources.push(expression.textureFile);
+          }
+          if(!variantTexture)throw new Error(`สีหน้า “${expression.label}” ไม่พบ Texture`);
+        }
+        if(expressionMethod==="texture"&&expression.textureFile&&$("includeSource").checked)sources.push(expression.textureFile);
+
+        variants.push({
+          expression,index,variantItem,
+          identifier:`${ns}:${variantItem}`,
+          geometry:variantGeometry,
+          geometryId:variantGeometryId,
+          geometryFileName,
+          texture:variantTexture,
+          textureFileName,
+          texturePath:`textures/entity/${textureFileName.replace(/\.png$/i,"")}`,
+          renderId:`controller.render.${ns}.${item}.expr_${index}`
+        });
       }
     }
 
@@ -113,12 +193,12 @@ $("buildBtn").addEventListener("click",async()=>{
         }
       }
     });
-    const makeAttachable=(id,renderController)=> {
+    const makeAttachable=(id,renderController,geometryIdentifier=geometryId,texturePath=`textures/entity/${item}`)=>{
       const desc={
         identifier:id,
         materials:{default:"entity_alphatest"},
-        textures:{default:`textures/entity/${item}`},
-        geometry:{default:geometryId},
+        textures:{default:texturePath},
+        geometry:{default:geometryIdentifier},
         render_controllers:[renderController]
       };
       if(animation){
@@ -134,14 +214,14 @@ $("buildBtn").addEventListener("click",async()=>{
 
     const defaultRenderId=`controller.render.${ns}.${item}.default`;
     const expressionRenderFile=controllerEnabled
-      ? makeExpressionRenderControllers(ns,item,expressions)
+      ? expressionMethod==="bone"
+        ? makeExpressionRenderControllers(ns,item,expressions)
+        : makeSimpleExpressionRenderControllers(ns,item,expressions.length)
       : {format_version:"1.8.0",render_controllers:{[defaultRenderId]:{geometry:"Geometry.default",materials:[{"*":"Material.default"}],textures:["Texture.default"]}}};
 
     const bp=new JSZip(),rp=new JSZip();
     bp.file("manifest.json",JSON.stringify(bpManifest,null,2));
     rp.file("manifest.json",JSON.stringify(rpManifest,null,2));
-    rp.folder("models/entity").file(`${item}.geo.json`,JSON.stringify(geometry,null,2));
-    rp.folder("textures/entity").file(`${item}.png`,texture);
     rp.folder("textures/items").file(`${item}.png`,icon);
     rp.folder("render_controllers").file(`${item}.render_controllers.json`,JSON.stringify(expressionRenderFile,null,2));
     rp.folder("texts").file("languages.json",JSON.stringify(["en_US","th_TH"],null,2));
@@ -153,16 +233,22 @@ $("buildBtn").addEventListener("click",async()=>{
     const displayTh=$("displayTh").value||packName;
 
     if(controllerEnabled){
-      expressions.forEach((expression,index)=>{
-        const suffix=index?`_expr_${index}`:"";
-        const variantItem=`${item}${suffix}`;
-        const variantIdentifier=`${ns}:${variantItem}`;
-        const renderId=`controller.render.${ns}.${item}.expr_${index}`;
-        bp.folder("items").file(`${variantItem}.json`,JSON.stringify(makeWearableItem(variantIdentifier,index===0),null,2));
-        rp.folder("attachables").file(`${variantItem}.json`,JSON.stringify(makeAttachable(variantIdentifier,renderId),null,2));
-        languageEn.push(`item.${variantIdentifier}.name=${displayEn}`);
-        languageTh.push(`item.${variantIdentifier}.name=${displayTh}`);
-      });
+      const writtenGeometry=new Set();
+      const writtenTextures=new Set();
+      for(const variant of variants){
+        bp.folder("items").file(`${variant.variantItem}.json`,JSON.stringify(makeWearableItem(variant.identifier,variant.index===0),null,2));
+        rp.folder("attachables").file(`${variant.variantItem}.json`,JSON.stringify(makeAttachable(variant.identifier,variant.renderId,variant.geometryId,variant.texturePath),null,2));
+        if(!writtenGeometry.has(variant.geometryFileName)){
+          rp.folder("models/entity").file(variant.geometryFileName,JSON.stringify(variant.geometry,null,2));
+          writtenGeometry.add(variant.geometryFileName);
+        }
+        if(!writtenTextures.has(variant.textureFileName)){
+          rp.folder("textures/entity").file(variant.textureFileName,variant.texture);
+          writtenTextures.add(variant.textureFileName);
+        }
+        languageEn.push(`item.${variant.identifier}.name=${displayEn}`);
+        languageTh.push(`item.${variant.identifier}.name=${displayTh}`);
+      }
 
       const controllerIdentifier=`${ns}:${controllerItem}`;
       const controllerJson={
@@ -196,6 +282,8 @@ $("buildBtn").addEventListener("click",async()=>{
     }else{
       bp.folder("items").file(`${item}.json`,JSON.stringify(makeWearableItem(identifier,true),null,2));
       rp.folder("attachables").file(`${item}.json`,JSON.stringify(makeAttachable(identifier,defaultRenderId),null,2));
+      rp.folder("models/entity").file(`${item}.geo.json`,JSON.stringify(geometry,null,2));
+      rp.folder("textures/entity").file(`${item}.png`,texture);
       languageEn.push(`item.${identifier}.name=${displayEn}`);
       languageTh.push(`item.${identifier}.name=${displayTh}`);
     }
@@ -221,11 +309,19 @@ $("buildBtn").addEventListener("click",async()=>{
     addon.file(`${outputBase}_RP.mcpack`,rpBlob);
     if(sources.length){
       const sourceFolder=addon.folder("source_files");
-      for(const file of sources)sourceFolder.file(file.name,file);
+      const usedNames=new Set();
+      for(const file of sources){
+        if(!file)continue;
+        let name=file.name||"source_file";
+        if(usedNames.has(name))name=`${Date.now()}_${name}`;
+        usedNames.add(name);
+        sourceFolder.file(name,file);
+      }
     }
     if($("includeReadme").checked){
+      const methodText={bone:"Bone",texture:"Texture",model:"โมเดลแยก"}[expressionMethod]||expressionMethod;
       const controllerLines=controllerEnabled
-        ? `\nController: /give @s ${ns}:${controllerItem} 1\nวิธีใช้: สวม ${identifier} แล้วถือ Controller กดใช้และเลือกสีหน้า\n`
+        ? `\nController: /give @s ${ns}:${controllerItem} 1\nวิธีใช้: สวม ${identifier} แล้วถือ Controller กดใช้และเลือกสีหน้า\nวิธีเปลี่ยนสีหน้า: ${methodText}\nจำนวนสีหน้า: ${expressions.length}\n`
         : "\nระบบสีหน้า: ไม่ได้เปิดใช้\n";
       addon.file("README_TH.txt",`แพ็ก: ${packName}\nไอเทม: ${identifier}\nGeometry: ${geometryId}\nคำสั่ง: /give @s ${identifier} 1\nชื่อไฟล์: ${outputBase}.mcaddon\n${controllerLines}`);
     }
