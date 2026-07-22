@@ -164,11 +164,19 @@ $("mergeBtn").addEventListener("click",async()=>{
   }
 });
 
+function loadDecorationSafety(){
+  if(document.querySelector('script[data-rabbit-decoration-safety]'))return;
+  const safety=document.createElement("script");
+  safety.src="app-decoration-safety.js";
+  safety.dataset.rabbitDecorationSafety="1";
+  document.body.appendChild(safety);
+}
 function loadDecorationFeatures(){
   if(document.querySelector('script[data-rabbit-decorations]'))return;
   const script=document.createElement("script");
   script.src="app-decorations.js";
   script.dataset.rabbitDecorations="1";
+  script.addEventListener("load",loadDecorationSafety,{once:true});
   document.body.appendChild(script);
 }
 
