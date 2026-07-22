@@ -164,6 +164,16 @@ $("mergeBtn").addEventListener("click",async()=>{
   }
 });
 
+function loadLyStudioTheme(){
+  if(document.querySelector('link[data-ly-studio-theme]'))return;
+  const theme=document.createElement("link");
+  theme.rel="stylesheet";
+  theme.href="theme-v2.css";
+  theme.dataset.lyStudioTheme="2";
+  document.head.appendChild(theme);
+}
+loadLyStudioTheme();
+
 function loadDecorationSafety(){
   if(document.querySelector('script[data-rabbit-decoration-safety]'))return;
   const safety=document.createElement("script");
