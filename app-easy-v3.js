@@ -3,7 +3,8 @@
   if(window.__lyStudioV4Loader)return;
   window.__lyStudioV4Loader=true;
 
-  const version="4.0.0";
+  document.title="LY Bedrock Character Studio v4";
+  const version="4.0.1";
   const read=async path=>{
     const response=await fetch(`${path}?v=${version}`,{cache:"no-store"});
     if(!response.ok)throw new Error(`โหลด ${path} ไม่สำเร็จ (${response.status})`);
@@ -25,6 +26,11 @@
       "v4/app-studio-v4-preview.part2.txt"
     ]);
     new Function(`${preview}\n//# sourceURL=app-studio-v4-preview.js`)();
+
+    const title=document.querySelector(".topbar h1");
+    if(title)title.textContent="Bedrock Character Studio v4";
+    const eyebrow=document.querySelector(".topbar .eyebrow");
+    if(eyebrow)eyebrow.textContent="LY ADD-ON PRODUCTION WORKSPACE";
   }catch(error){
     console.error("Studio v4 failed to start",error);
     const main=document.querySelector(".main");
