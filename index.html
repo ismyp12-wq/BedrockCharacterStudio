@@ -119,11 +119,13 @@
       <section id="project" class="workspace-section grid-two">
         <div class="card">
           <div class="section-head compact">
-            <div><span>02</span><div><h3>ข้อมูลโปรเจกต์</h3><p>ชื่อแพ็กและรหัสไอเทม</p></div></div>
+            <div><span>02</span><div><h3>ข้อมูลโปรเจกต์</h3><p>ชื่อแพ็ก รหัสไอเทม และชื่อไฟล์ส่งลูกค้า</p></div></div>
           </div>
           <div class="form-grid">
             <label><span>ชื่อแพ็ก</span><input id="packName" value="Customer Model"></label>
             <label><span>ผู้สร้าง</span><input id="author" value="hmokbacon"></label>
+            <label><span>คำนำหน้าชื่อไฟล์ (ล็อก)</span><input value="LY-" readonly></label>
+            <label><span>ชื่อลูกค้า / ชื่องาน</span><input id="customerFileName" value="Hmok_Head" placeholder="เช่น Hmok_Head"></label>
             <label><span>Namespace</span><input id="namespace" value="hm"></label>
             <label><span>Item ID</span><input id="itemName" value="customer_model"></label>
             <label><span>ชื่อภาษาไทย</span><input id="displayTh" value="โมเดลลูกค้า"></label>
@@ -218,43 +220,28 @@
             <label class="merge-choice active">
               <input type="radio" name="mergeStrategy" value="bundle" checked>
               <span class="merge-choice-icon">S</span>
-              <span>
-                <b>Safe Bundle</b>
-                <small>แนะนำ — เก็บแต่ละ BP/RP แยกกันภายใน .mcaddon เดียว ลดปัญหาไฟล์ชนกัน</small>
-              </span>
+              <span><b>Safe Bundle</b><small>แนะนำ — เก็บแต่ละ BP/RP แยกกันภายใน .mcaddon เดียว ลดปัญหาไฟล์ชนกัน</small></span>
             </label>
-
             <label class="merge-choice">
               <input type="radio" name="mergeStrategy" value="consolidate">
               <span class="merge-choice-icon warning">A</span>
-              <span>
-                <b>รวมเป็น BP/RP เดียว</b>
-                <small>ทดลอง — รวมโฟลเดอร์เข้าด้วยกัน อาจเกิด Identifier หรือชื่อไฟล์ชนกัน</small>
-              </span>
+              <span><b>รวมเป็น BP/RP เดียว</b><small>ทดลอง — รวมโฟลเดอร์เข้าด้วยกัน อาจเกิด Identifier หรือชื่อไฟล์ชนกัน</small></span>
             </label>
           </div>
 
           <label class="merge-drop" id="mergeDrop">
             <input id="mergeFiles" type="file" accept=".mcaddon,.mcpack,.zip" multiple>
-            <div class="merge-drop-icon">
-              <i class="ear left"></i><i class="ear right"></i>
-              <span class="eye l"></span><span class="eye r"></span>
-            </div>
+            <div class="merge-drop-icon"><i class="ear left"></i><i class="ear right"></i><span class="eye l"></span><span class="eye r"></span></div>
             <strong>ลาก Add-on หลายไฟล์มาวาง</strong>
             <span>รองรับ .mcaddon, .mcpack และ .zip</span>
             <em id="mergeFileCount">ยังไม่ได้เลือกไฟล์</em>
           </label>
 
           <div class="merge-settings">
-            <label><span>ชื่อไฟล์ผลลัพธ์</span><input id="mergeOutputName" value="combined_addons"></label>
-            <label class="switch-row">
-              <span><b>สร้าง UUID ใหม่เมื่อรวมจริง</b><small>ใช้เฉพาะโหมดรวม BP/RP เดียว</small></span>
-              <input id="regenerateMergeUuids" type="checkbox" checked><i></i>
-            </label>
-            <label class="switch-row">
-              <span><b>เก็บ README ของแต่ละแพ็ก</b><small>รวมเอกสารต้นฉบับไว้ในโฟลเดอร์ docs</small></span>
-              <input id="keepMergeDocs" type="checkbox" checked><i></i>
-            </label>
+            <label><span>คำนำหน้าชื่อไฟล์ (ล็อก)</span><input value="LY-" readonly></label>
+            <label><span>ชื่อไฟล์ผลลัพธ์</span><input id="mergeOutputName" value="Combined_Addons" placeholder="เช่น Character_Set"></label>
+            <label class="switch-row"><span><b>สร้าง UUID ใหม่เมื่อรวมจริง</b><small>ใช้เฉพาะโหมดรวม BP/RP เดียว</small></span><input id="regenerateMergeUuids" type="checkbox" checked><i></i></label>
+            <label class="switch-row"><span><b>เก็บ README ของแต่ละแพ็ก</b><small>รวมเอกสารต้นฉบับไว้ในโฟลเดอร์ docs</small></span><input id="keepMergeDocs" type="checkbox" checked><i></i></label>
           </div>
 
           <div class="merge-inspector">
@@ -263,20 +250,10 @@
             <div><span>Resource Packs</span><b id="mergeStatRP">0</b></div>
             <div><span>คำเตือน</span><b id="mergeStatWarnings">0</b></div>
           </div>
-
-          <div id="mergeProblems" class="merge-problems">
-            <div class="merge-empty">ยังไม่มีไฟล์สำหรับตรวจสอบ</div>
-          </div>
-
+          <div id="mergeProblems" class="merge-problems"><div class="merge-empty">ยังไม่มีไฟล์สำหรับตรวจสอบ</div></div>
           <div class="merge-actions">
-            <div>
-              <span class="build-label">MERGE OUTPUT</span>
-              <h3 id="mergeSummary">เลือก Add-on อย่างน้อย 1 ไฟล์</h3>
-              <p id="mergeStatus"></p>
-            </div>
-            <button id="mergeBtn" disabled>
-              <span>MERGE ADD-ONS</span><b>↓</b>
-            </button>
+            <div><span class="build-label">MERGE OUTPUT</span><h3 id="mergeSummary">เลือก Add-on อย่างน้อย 1 ไฟล์</h3><p id="mergeStatus"></p></div>
+            <button id="mergeBtn" disabled><span>MERGE ADD-ONS</span><b>↓</b></button>
           </div>
         </div>
       </section>
@@ -286,6 +263,8 @@
   </div>
 
   <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
-  <script src="app.js"></script>
+  <script src="app-core.js"></script>
+  <script src="app-build.js"></script>
+  <script src="app-merge.js"></script>
 </body>
 </html>
