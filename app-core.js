@@ -10,10 +10,22 @@ function cleanCustomerFileName(value,fallback="Customer_Head"){
   return cleaned||fallback;
 }
 function lyFileBase(value,fallback="Customer_Head"){return `LY-${cleanCustomerFileName(value,fallback)}`}
-function updateIds(){const ns=cleanId($("namespace").value,"hm"),item=cleanId($("itemName").value,"customer_model");$("geometryId").value=`geometry.${ns}.${item}`;$("animationId").value=`animation.${ns}.${item}.idle_motion`;$("giveCommand").textContent=`/give @s ${ns}:${item} 1`;refresh()}
-["namespace","itemName"].forEach(id=>$(id).addEventListener("input",updateIds));
+function customerItemId(value){return cleanId(cleanCustomerFileName(value,"customer_head"),"customer_head")}
+function updateIds(){
+  const ns="ly";
+  const item=customerItemId($("customerFileName")?.value||$("itemName").value);
+  $("namespace").value=ns;
+  $("namespace").readOnly=true;
+  $("itemName").value=item;
+  $("itemName").readOnly=true;
+  $("geometryId").value=`geometry.${ns}.${item}`;
+  $("animationId").value=`animation.${ns}.${item}.idle_motion`;
+  $("giveCommand").textContent=`/give @s ${ns}:${item} 1`;
+  refresh();
+}
+$("customerFileName")?.addEventListener("input",updateIds);
 
-document.querySelectorAll(".nav-item").forEach(b=>b.addEventListener("click",()=>{document.querySelectorAll(".nav-item").forEach(x=>x.classList.toggle("active",x===b));document.getElementById(b.dataset.target)?.scrollIntoView({behavior:"smooth"})}));
+ document.querySelectorAll(".nav-item").forEach(b=>b.addEventListener("click",()=>{document.querySelectorAll(".nav-item").forEach(x=>x.classList.toggle("active",x===b));document.getElementById(b.dataset.target)?.scrollIntoView({behavior:"smooth"})}));
 document.querySelectorAll(".mode-tab").forEach(b=>b.addEventListener("click",()=>{mode=b.dataset.mode;document.querySelectorAll(".mode-tab").forEach(x=>x.classList.toggle("active",x===b));$("bbMode").classList.toggle("hidden",mode!=="bbmodel");$("manualMode").classList.toggle("hidden",mode!=="manual");refresh()}));
 
 function setStatus(text){$("status").textContent=text;$("globalStatus").textContent=text||"พร้อมใช้งาน"}
