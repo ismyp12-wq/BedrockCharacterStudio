@@ -1,0 +1,70 @@
+  const baseOutfitTarget=typeof outfitTargetBone==="function"?outfitTargetBone:null;
+  if(baseOutfitTarget){
+    outfitTargetBone=function(name){
+      const key=norm(name);
+      for(const role of ROLES){const selected=state.mapping[role.id];if(selected&&norm(selected)===key)return role.id;}
+      return baseOutfitTarget(name);
+    };
+  }
+
+  function createShell(){
+    if($id("lyStudioV4"))return;
+    document.querySelector(".easy-v3-shell")?.remove();
+    const main=document.querySelector(".main");if(!main)return;
+    const shell=document.createElement("section");shell.id="lyStudioV4";shell.className="v4-shell";
+    shell.innerHTML=`
+      <div class="v4-head"><div><span class="v4-kicker">LY BEDROCK CHARACTER STUDIO</span><h2>สร้าง Add-on แบบเป็นขั้นตอน</h2><p>เลือกงาน ใส่ไฟล์ ตรวจ Bone และทดลองพรีวิวก่อน Build</p></div><div class="v4-save"><i></i><span id="v4SaveStatus">พร้อมบันทึกอัตโนมัติ</span></div></div>
+      <div id="v4ModeGrid" class="v4-mode-grid"></div>
+      <div class="v4-tools">
+        <label>เทมเพลต<select id="v4Template"><option value="blank">เริ่มว่าง</option><option value="head">หัว / ทรงผม</option><option value="outfit">ชุดเต็มตัว</option><option value="wings">ปีก</option><option value="cape">ผ้าคลุม</option><option value="faces">สีหน้า 4 แบบ</option><option value="multioutfit">ชุดหลายแบบ</option></select></label>
+        <button id="v4ApplyTemplate" type="button">ใช้เทมเพลต</button>
+        <label class="v4-import">นำเข้า Add-on เดิม<input id="v4AddonImport" type="file" accept=".mcaddon,.mcpack,.zip"></label>
+        <button id="v4Undo" type="button" title="ย้อนกลับ">↶ Undo</button><button id="v4Redo" type="button" title="ทำซ้ำ">↷ Redo</button>
+        <button id="v4Reset" class="danger" type="button">ล้างโปรเจกต์</button>
+      </div>
+      <div class="v4-stepbar">${[1,2,3,4].map((n,i)=>`<button type="button" data-v4-step="${n}"><em>${n}</em><b>${["เลือกประเภท","ใส่ไฟล์","ตั้งค่าและพรีวิว","ตรวจสอบและ Build"][i]}</b></button>`).join("")}</div>
+      <div class="v4-footbar"><label><input id="v4Advanced" type="checkbox"> แสดงการตั้งค่าขั้นสูง</label><div><button id="v4Back" type="button">← ย้อนกลับ</button><button id="v4Next" class="primary" type="button">ถัดไป →</button></div></div>`;
+    const topbar=document.querySelector(".topbar");topbar?.insertAdjacentElement("afterend",shell);
+    const grid=$id("v4ModeGrid");
+    Object.entries(MODES).forEach(([key,m])=>{const b=document.createElement("button");b.type="button";b.className="v4-mode";b.dataset.mode=key;b.innerHTML=`<i>${m.icon}</i><b>${m.title}</b><span>${m.desc}</span>`;b.onclick=()=>setMode(key,true);grid.appendChild(b);});
+    shell.querySelectorAll("[data-v4-step]").forEach(b=>b.onclick=()=>setStep(Number(b.dataset.v4Step)));
+    $id("v4Back").onclick=()=>setStep(state.step-1);$id("v4Next").onclick=()=>setStep(state.step+1);
+    $id("v4Advanced").checked=state.advanced;$id("v4Advanced").onchange=e=>{state.advanced=e.target.checked;document.body.classList.toggle("v4-advanced",state.advanced);localStorage.setItem("lyStudioV4Advanced",state.advanced?"1":"0");};
+    $id("v4ApplyTemplate").onclick=()=>applyTemplate($id("v4Template").value);
+    $id("v4AddonImport").onchange=e=>importAddon(e.target.files?.[0]);
+    $id("v4Undo").onclick=undo;$id("v4Redo").onclick=redo;
+    $id("v4Reset").onclick=()=>{if(confirm("ล้างค่าที่บันทึกและเริ่มโปรเจกต์ใหม่หรือไม่?")){localStorage.removeItem(STORAGE_KEY);localStorage.removeItem("lyStudioV4Mode");localStorage.removeItem("lyStudioV4Step");location.reload();}};
+  }
+
+  function createBonePanel(){
+    if($id("v4BonePanel"))return;
+    const card=$id("geometry")?.querySelector(".card");if(!card)return;
+    const panel=document.createElement("div");panel.id="v4BonePanel";panel.className="v4-feature-card";
+    panel.innerHTML=`<div class="v4-card-head"><div><h4>จับคู่ Bone กับตัวผู้เล่น</h4><p>เลือก Bone ของโมเดลให้ตรงกับหัว ลำตัว แขน และขา</p></div><button id="v4AutoMap" type="button">ตรวจและจับคู่อัตโนมัติ</button></div><div id="v4BoneMap" class="v4-bone-map"></div><div id="v4BoneSummary" class="v4-inline-status"></div>`;
+    card.appendChild(panel);$id("v4AutoMap").onclick=autoMapping;renderBoneMapping();
+  }
+  function renderBoneMapping(){
+    const root=$id("v4BoneMap");if(!root)return;const names=sourceBoneNames();
+    root.innerHTML=ROLES.map(role=>`<label><span>${role.label}<small>${role.id}</small></span><select data-v4-role="${role.id}"><option value="">— ยังไม่เลือก —</option>${names.map(n=>`<option value="${esc(n)}" ${state.mapping[role.id]===n?"selected":""}>${esc(n)}</option>`).join("")}</select></label>`).join("");
+    root.querySelectorAll("select").forEach(s=>s.onchange=()=>{state.mapping[s.dataset.v4Role]=s.value;updateBoneSummary();scheduleSave(true);window.lyV4RefreshPreview?.();});updateBoneSummary();
+  }
+  function updateBoneSummary(){
+    const el=$id("v4BoneSummary");if(!el)return;const selected=ROLES.filter(r=>state.mapping[r.id]).length;const duplicate=Object.values(state.mapping).filter(Boolean).some((v,i,a)=>a.indexOf(v)!==i);
+    el.className=`v4-inline-status ${selected===6&&!duplicate?"ok":"warn"}`;el.textContent=selected===6&&!duplicate?"✓ จับคู่ครบ 6 ส่วน พร้อมสร้างชุดที่ขยับตามตัว":`จับคู่แล้ว ${selected}/6 ส่วน${duplicate?" • มี Bone ถูกเลือกซ้ำ":""}`;
+  }
+
+  function createValidationPanel(){
+    if($id("v4Validation"))return;const card=$id("build")?.querySelector(".card");if(!card)return;
+    const panel=document.createElement("div");panel.id="v4Validation";panel.className="v4-validation";panel.innerHTML=`<div class="v4-card-head"><div><h4>ตรวจสอบความพร้อม</h4><p>ตรวจไฟล์ Bone Texture Identifier และระบบ Controller</p></div><button id="v4Validate" type="button">ตรวจทั้งหมด</button></div><ul id="v4ValidationList"></ul>`;card.appendChild(panel);$id("v4Validate").onclick=()=>runProjectValidation(true);
+  }
+
+  function createSimulator(){
+    if($id("v4Simulator"))return;const card=$id("controller")?.querySelector(".card");if(!card)return;
+    const panel=document.createElement("div");panel.id="v4Simulator";panel.className="v4-feature-card v4-simulator";panel.innerHTML=`<div class="v4-card-head"><div><h4>ตัวจำลองเมนูในเกม</h4><p>ทดลองเลือกสีหน้าและของตกแต่งก่อน Build</p></div></div><div id="v4SimulatorBody"></div>`;card.appendChild(panel);renderSimulator();
+  }
+  function renderSimulator(){
+    const root=$id("v4SimulatorBody");if(!root)return;
+    if(state.mode==="faces"){
+      const rows=[...document.querySelectorAll(".expression-row")];root.innerHTML=`<div class="v4-phone"><b>${esc($id("controllerMenuTitle")?.value||"เลือกสีหน้า")}</b><p>${esc($id("controllerMenuBody")?.value||"")}</p><div>${rows.map((r,i)=>`<button type="button" data-face="${i}">${esc(r.querySelector(".expr-label")?.value||`สีหน้า ${i+1}`)}</button>`).join("")}</div><small id="v4SimResult">เลือกสีหน้าเพื่อทดลอง</small></div>`;
+      root.querySelectorAll("button").forEach(b=>b.onclick=()=>{root.querySelectorAll("button").forEach(x=>x.classList.toggle("active",x===b));$id("v4SimResult").textContent=`แสดง: ${b.textContent}`;});
+    }else if(state.mode==="decorate"){
